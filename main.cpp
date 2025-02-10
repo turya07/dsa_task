@@ -1,26 +1,107 @@
 #include <bits/stdc++.h>
-#define INT unsigned int
-
-#define INF (INT)1e8
 using namespace std;
+
+#define INT unsigned int
+#define INF (INT)1e8
+
+typedef struct Node Node;
+typedef struct Edge Edge;
+struct Node
+{
+    double lat;
+    double lng;
+    string lat_lng;
+    vector<Edge> edges;
+};
 
 struct Edge
 {
-    std::string edgeName;
-    std::string nodeA;
-    std::string nodeB;
+    Node dest;
     double weight;
 };
+bool operator<(const Node &a, const Node &b)
+{
+    return a.lat < b.lat;
+}
 
+bool operator==(const Node &a, const Node &b)
+{
+    return a.lat_lng == b.lat_lng;
+}
+void readDataFromFile(ifstream &file, set<Node> &nodes)
+{
+    int counter = 0;
+    string line;
+    while (getline(file, line))
+    {
+        counter++;
+        char comma = ',';
+        stringstream ss(line);
+        vector<Edge> edges;
+        string roadName;
+        getline(ss, roadName, comma);
+
+        double lon1, lat1, lon2, lat2;
+        stack<string> weight;
+        ss >> lon1 >> comma >> lat1 >> comma;
+        // eituku obdi ami proti line read korsi, then first node er jonno lat,lng 1 and 2nd node er jonno lat,lng 2 nisi.
+        Node a, b, *temp;
+        a.lat = lat1;
+        a.lng = lon1;
+        a.lat_lng = to_string(lat1) + "," + to_string(lon1);
+
+        while (ss.good())
+        {
+            // ei loop er maddhome ekdom last obdi read krsi, last e ekta distance/weight dewa ase, oitake weight stack e push krsi ekdom finally.
+            ss >> lon2 >> comma >> lat2 >> comma;
+            weight.push(to_string(lon2));
+            weight.push(to_string(lat2));
+        }
+
+        // cout << ": " << weight.top() << endl;
+        double w = stod(weight.top());
+        weight.pop();
+        weight.pop();
+
+        while (!weight.empty())
+        {
+            lat2 = stod(weight.top());
+            weight.pop();
+            lon2 = stod(weight.top());
+            weight.pop();
+            b.lat = lat2;
+            b.lng = lon2;
+            b.lat_lng = to_string(lat2) + "," + to_string(lon2);
+            edges.push_back({b, w});
+        }
+
+        // check krtesi je first node ta er age amar SET of Node e ase kina
+        if (nodes.find(a) != nodes.end())
+        {
+            a = *const_cast<Node *>(&(*nodes.find(a))); // jodi thake, temp = node.find(a) krsi.
+        }
+        for (auto e : edges)
+        {
+            a.edges.push_back(e); // temp er edges e `e node` push krsi.
+        }
+
+        nodes.insert(a); // finally temp er value ta insert krsi nodes set e. ekhane SET use koray automatic duplicate value thakbe na. But old destination node ta thakle new destination node ta soho new destination node add hobe edge e.
+        edges.clear();
+    }
+}
+
+// main function
 int main(const int argc, const char *argv[])
 {
 
+    // arguement theke file nicchi, tai argc == 2 hote hobe
     if (argc != 2)
     {
         cerr << "Usage: " << "./main" << " <data-set>" << endl;
         exit(EXIT_FAILURE);
     }
     ifstream file;
+    ofstream output;
     file.open(argv[1], ios::out);
     if (!file.is_open())
     {
@@ -28,73 +109,40 @@ int main(const int argc, const char *argv[])
         exit(EXIT_FAILURE);
         return 1;
     }
-    int n = 0;
-    string s, line;
-    int tracking = 0;
 
-    int i = 0;
-    vector<Edge> edges;
-    while (getline(file, line))
+    set<Node> nodes;
+
+    readDataFromFile(file, nodes);
+    // now write data in output terminal
+
+    output.open("output.txt", ios::out);
+    unsigned int tt = 0, te = 0;
+    for (auto node : nodes)
     {
-        i++;
-        
-        char comma = ',';
-        stringstream ss(line);
-        string roadName;
-        getline(ss, roadName, comma);
-
-        float lon1, lat1, lon2, lat2;
-        stack<string> weight;
-        ss >> lon1 >> comma >> lat1 >> comma >> lon2 >> comma >> lat2 >> comma;
-
-        while (ss.good())
+        output << node.lat_lng << ":";
+        for (auto edge : node.edges)
         {
-            string substr;
-            getline(ss, substr, ',');
-            weight.push(substr);
+            output << "\t=>" << edge.dest.lat_lng;
         }
-
-        edges.push_back({roadName, to_string(lon1) + ", " + to_string(lat1), to_string(lon2) + ", " + to_string(lat2), double_t(stod(weight.top()))});
-
-        // poping the last 2 element of the stack
-        weight.pop();
-        weight.pop();
-        
-        // optimizing edge and reaching to the last pari of LNG and LAT
-        while (!weight.empty())
-        {
-            if (weight.size() == 2)
-            {
-                lat2 = stod(weight.top());
-                weight.pop();
-                lon2 = stod(weight.top());
-                weight.pop();
-            }
-            break;
-        }
-
-        Edge *top;
-        top = &edges.back();
-        top->nodeB = to_string(lon2) + ", " + to_string(lat2); // updating the last pair of LNG and LAT
-        cout << "Name: " << roadName << endl;
-        cout << "Source: " << "(" << top->nodeA << ")" << endl;
-        cout << "Destination: " << "(" << top->nodeB << ")" << endl;
-
-        cout << "Distance in Meters: " << fixed << setprecision(2) << top->weight * 1000 << endl
-             << endl;
+        output << "--> " + to_string(node.edges.front().weight) << endl;
     }
-    cout << "Number of Data: " << i << endl
-         << endl;
+    output << "========++========++========++========++========++========" << endl;
+    output.close();
+
     return 0;
 
-    vector<vector<INT>> graph;
-    graph.resize(n, vector<INT>(n));
+    // Nicher code ta normal ekta dijkstra algorithm er graph
+
+    int n = 0;
+    vector<vector<int>> graph;
+    graph.resize(n, vector<int>(n));
 
     for (INT i = 0; i < n; i++)
     {
         for (INT j = 0; j < n; j++)
         {
-            cin >> graph[i][j];
+            double lat1, lat2, lon1, lon2;
+            cin >> lat1 >> lon1 >> lat2 >> lon2;
         }
     }
 
