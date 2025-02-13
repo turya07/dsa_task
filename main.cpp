@@ -4,202 +4,530 @@ using namespace std;
 #define INT unsigned int
 #define INF (INT)1e8
 
-typedef struct Node Node;
-typedef struct Edge Edge;
-struct Node
+typedef struct Node
 {
     double lat;
     double lng;
-    string lat_lng;
-    vector<Edge> edges;
-};
+} Node;
 
-struct Edge
+typedef struct Edge
 {
-    Node dest;
-    double weight;
-};
-bool operator<(const Node &a, const Node &b)
-{
-    return a.lat < b.lat;
-}
+    int source;      // eta ami vabtam NODE e rakha lagbe
+    int destination; // same as above
+    double distance; // age etar name ami weight rakhsilam
+    double altitude;
 
-bool operator==(const Node &a, const Node &b)
+    string type;            // "road" or "metro" for the edge
+    string sourceName;      // For Metro, the start station
+    string destinationName; // For Metro, the end station
+} Edge;
+
+/**
+ * Struct to represent a delimited string
+ * This is used to read a string from a stream until a delimiter is encountered. Here delimiter is a comma.
+ */
+struct DelimitedString
 {
-    return a.lat_lng == b.lat_lng;
-}
-void readDataFromFile(ifstream &file, set<Node> &nodes)
-{
-    int counter = 0;
-    string line;
-    while (getline(file, line))
+    string value;
+    char delimiter; // delimiter that ends the value
+
+    DelimitedString(char delim = ',') : delimiter(delim)
     {
-        counter++;
-        char comma = ',';
-        stringstream ss(line);
-        vector<Edge> edges;
-        string roadName;
-        getline(ss, roadName, comma);
+    }
 
-        double lon1, lat1, lon2, lat2;
-        stack<string> weight;
-        ss >> lon1 >> comma >> lat1 >> comma;
-        // eituku obdi ami proti line read korsi, then first node er jonno lat,lng 1 and 2nd node er jonno lat,lng 2 nisi.
-        Node a, b, *temp;
-        a.lat = lat1;
-        a.lng = lon1;
-        a.lat_lng = to_string(lat1) + "," + to_string(lon1);
+    friend istream &operator>>(istream &is, DelimitedString &output)
+    {
+        getline(is, output.value, output.delimiter);
+        return is;
+    }
 
-        while (ss.good())
+    // sir, ekhane tahole comma separate kore just value ta read kore rakha hobe. eta kore amra ekta string read korte pari.
+};
+
+// Function to calculate the distance between two coordinates (Haversine formula)
+double calculateDistance(double lat1, double lon1, double lat2, double lon2)
+{
+    double R = 6371; // Radius of the Earth in kilometers
+    // basically higher math e amra s = r*theta * pi / 180 use kore Dhaka to Rajsahi distance type math krsilam. erokom kichu ami bujtesi.
+    double dLat = (lat2 - lat1) * M_PI / 180.0;
+    double dLon = (lon2 - lon1) * M_PI / 180.0;
+    double a = sin(dLat / 2) * sin(dLat / 2) +
+               cos(lat1 * M_PI / 180.0) * cos(lat2 * M_PI / 180.0) *
+                   sin(dLon / 2) * sin(dLon / 2);
+    double c = 2 * atan2(sqrt(a), sqrt(1 - a)); // eta bujtesi na.
+    return R * c;
+}
+
+// dijkstra's algorithm for this particular problem
+/**
+ * @param srcNode Source node index. Basically ei kaj ta amar mathay astesilo na je ami double type er long-lat ke kivabe int type er ekta node hisebe store korbo
+ * @param destNode Destination node index. Same as above.
+ * @param nodes Set of nodes. eta ami ageo banaisilam
+ * @param edges Set of edges. eta ami ageo banaisilam. But format e ektu difference silo.
+ * @param adjList Adjacency list representation of the graph. eta ami ageo banaisilam. but ami SET use korsilam. pore ar hisab milate pari ni.
+ */
+pair<vector<int>, double> dijkstra(int srcNode, int destNode, const vector<Node> &nodes, const vector<Edge> &edges, const map<int, vector<int>> &adjList)
+{
+    // Nicher code ta normal ekta dijkstra algorithm er graph
+    priority_queue<pair<double, int>, vector<pair<double, int>>, greater<pair<double, int>>> pq; // distance , node
+
+    vector<double> dist(nodes.size(), numeric_limits<double>::infinity());
+    vector<int> prev(nodes.size(), -1); // Store previous node in the shortest path. Also ekhane sob node ke -1 kore init kora hoise.
+
+    dist[srcNode] = 0;
+    pq.push({0, srcNode});
+
+    while (!pq.empty())
+    {
+        // ekhane 'd' hocche node er distance, 'u' hocche node er index
+        double d = pq.top().first;
+        int u = pq.top().second;
+
+        pq.pop();
+
+        if (d > dist[u]) // distance already kom, so bypass krbo
+            continue;
+        else
         {
-            // ei loop er maddhome ekdom last obdi read krsi, last e ekta distance/weight dewa ase, oitake weight stack e push krsi ekdom finally.
-            ss >> lon2 >> comma >> lat2 >> comma;
-            weight.push(to_string(lon2));
-            weight.push(to_string(lat2));
+            // check korbo node gular distance
+            if (adjList.find(u) != adjList.end())
+            {
+                for (int v : adjList.at(u))
+                {
+                    // Find the edge between u and v;
+                    double cost = numeric_limits<double>::infinity(); // first e cost er value INF kore nilam
+                    for (const auto &edge : edges)
+                    {
+                        if (edge.source == u && edge.destination == v) // basically srcnode r destnode er moddhe edge ache kina check korlam
+                        {
+                            cost = edge.distance;
+                            break;
+                        }
+                    }
+
+                    // nicher part ta normal dijkstra er code
+                    if (dist[v] > dist[u] + cost)
+                    {
+                        dist[v] = dist[u] + cost;
+                        prev[v] = u;
+                        pq.push({dist[v], v});
+                    }
+                }
+            }
         }
+    }
 
-        // cout << ": " << weight.top() << endl;
-        double w = stod(weight.top());
-        weight.pop();
-        weight.pop();
-
-        while (!weight.empty())
+    // ekhon path ta print/store korbo
+    vector<int> path;
+    if (dist[destNode] != numeric_limits<double>::infinity())
+    {
+        INT curNode = destNode;
+        while (curNode != -1)
         {
-            lat2 = stod(weight.top());
-            weight.pop();
-            lon2 = stod(weight.top());
-            weight.pop();
-            b.lat = lat2;
-            b.lng = lon2;
-            b.lat_lng = to_string(lat2) + "," + to_string(lon2);
-            edges.push_back({b, w});
+            path.push_back(curNode);
+            curNode = prev[curNode];
         }
+        reverse(path.begin(), path.end());
+    }
+    return {path, dist[destNode]};
 
-        // check krtesi je first node ta er age amar SET of Node e ase kina
-        if (nodes.find(a) != nodes.end())
-        {
-            a = *const_cast<Node *>(&(*nodes.find(a))); // jodi thake, temp = node.find(a) krsi.
-        }
-        for (auto e : edges)
-        {
-            a.edges.push_back(e); // temp er edges e `e node` push krsi.
-        }
+    // sir, niche amar same code ta ache. just ami store na kore print kortam normally int type node er case e.
 
-        nodes.insert(a); // finally temp er value ta insert krsi nodes set e. ekhane SET use koray automatic duplicate value thakbe na. But old destination node ta thakle new destination node ta soho new destination node add hobe edge e.
-        edges.clear();
+    // rest of the code was my OLD CODE for Dijkstra's algorithm
+    // vector<INT> dist(n, INF);
+    // vector<INT> parent(n, -1);
+    // vector<bool> visited(n, false);
+
+    // dist[0] = 0;
+    // for (INT i = 0; i < n; i++)
+    // {
+    //     INT min_dist = INF;
+    //     INT min_index = -1;
+    //     for (INT j = 0; j < n; j++)
+    //     {
+    //         if (!visited[j] && dist[j] < min_dist)
+    //         {
+    //             min_dist = dist[j];
+    //             min_index = j;
+    //         }
+    //     }
+
+    //     visited[min_index] = true;
+
+    //     for (INT j = 0; j < n; j++)
+    //     {
+    //         if (!visited[j] && graph[min_index][j] > 0 && dist[j] > dist[min_index] + graph[min_index][j])
+    //         {
+    //             dist[j] = dist[min_index] + graph[min_index][j];
+    //             parent[j] = min_index;
+    //         }
+    //     }
+    // }
+
+    // // Print the shortest path
+    // for (INT i = 0; i < n; i++)
+    // {
+    //     cout << "Shortest path from 1 to " << i + 1 << " is: ";
+    //     INT j = i;
+    //     while (j != -1)
+    //     {
+    //         cout << j + 1 << " ";
+    //         j = parent[j];
+    //     }
+    //     cout << "with cost: " << dist[i] << endl;
+    // }
+}
+
+// Function to read DhakaMetroRail data from Routemap-DhakaMetroRail.csv
+void readDhakaRoute(const string &filename, vector<Node> &nodes, vector<Edge> &edges, map<pair<double, double>, int> &nodeIndex, map<int, vector<int>> &adjacencyList)
+{
+    ifstream metrofile(filename);
+    string metroline;
+    string transportType, startName, endName;
+
+    if (metrofile.is_open())
+    {
+        while (getline(metrofile, metroline))
+        {
+            // Skip blank lines and lines starting with comments
+            if (metroline.empty() || metroline[0] == '#')
+                continue;
+
+            stringstream ss(metroline);
+            DelimitedString transportTypeStr(','), latStr(','), lonStr(','), startNameStr(','), endNameStr(',');
+            vector<pair<double, double>> coordinates;
+
+            // Parse the line
+            ss >> transportTypeStr >> latStr;
+
+            // Read coordinate pairs until no more can be read
+            while (ss.good())
+            {
+                DelimitedString lon(',');
+                ss >> lon; // Try to read the Longitude
+
+                if (!ss.fail()) // if it was read successfully.
+                {
+                    double lat = 0;
+                    double lonValue = 0;
+                    try
+                    {
+                        lat = stod(latStr.value);
+                        lonValue = stod(lon.value);
+                    }
+                    catch (...)
+                    { // catch all the exceptions
+                        // break from the loop to read the next csv line
+                        break;
+                    }
+
+                    coordinates.push_back({lat, lonValue});
+
+                    ss >> latStr; // load next Latitude or the startName
+
+                    if (ss.fail()) // startName failed. we must break;
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            try
+            {
+                ss >> startNameStr >> endNameStr;
+            }
+            catch (...)
+            {
+                // cout <<"Exception occured reading start and end name"<< endl;
+            }
+
+            // Function to add a node, only add if it doesn't exist.
+            auto addNode = [&](double latitude, double longitude)
+            {
+                pair<double, double> coords = {latitude, longitude};
+                if (nodeIndex.find(coords) == nodeIndex.end())
+                {
+                    Node newNode = {latitude, longitude};
+                    nodes.push_back(newNode);
+                    int index = nodes.size() - 1;
+                    nodeIndex[coords] = index;
+                    return index;
+                }
+                else
+                {
+                    return nodeIndex[coords];
+                }
+            };
+            double altitude = 0;
+
+            if (coordinates.size() >= 2)
+            {
+                int sourceNodeIndex = addNode(coordinates[0].first, coordinates[0].second);
+                int destNodeIndex = addNode(coordinates.back().first, coordinates.back().second);
+                double total_distance = 0;
+
+                for (size_t i = 0; i < coordinates.size() - 1; ++i)
+                {
+                    total_distance += calculateDistance(coordinates[i].first, coordinates[i].second, coordinates[i + 1].first, coordinates[i + 1].second);
+                }
+
+                Edge edge = {sourceNodeIndex, destNodeIndex, total_distance, altitude, "metro", startNameStr.value, endNameStr.value};
+                edges.push_back(edge);
+                if (adjacencyList.find(sourceNodeIndex) == adjacencyList.end())
+                {
+                    adjacencyList[sourceNodeIndex] = vector<int>(); // Initialize the vector if it doesn't exist
+                }
+                adjacencyList[sourceNodeIndex].push_back(destNodeIndex);
+            }
+        }
+        metrofile.close();
+    }
+    else
+    {
+        cerr << "Unable to open file " << filename << endl;
     }
 }
 
+// Function to read DhakaStreet data from Roadmap-Dhaka.csv
+void readDhakaStreet(const string &filename, vector<Node> &nodes, vector<Edge> &edges,
+                     map<pair<double, double>, int> &nodeIndex, map<int, vector<int>> &adjacencyList)
+{
+    ifstream file(filename);
+    string line;
+
+    if (file.is_open())
+    {
+        while (getline(file, line))
+        {
+            if (line.empty() || line[0] == '#')
+            {
+                cout << "Empty line detected" << endl;
+                continue;
+            }
+            stringstream ss(line);
+
+            DelimitedString dataType(','), nextValue(','), altitudeStr(','), distanceStr(',');
+            vector<pair<double, double>> coordinates;
+            double altitude = 0;
+            double distance = 0;
+
+            // Parse the line
+            ss >> dataType;
+
+            // Read coordinate pairs and altitude/distance
+            while (ss.good())
+            {
+                // Attempt to read latitude and longitude
+                DelimitedString latStr(','), lonStr(',');
+
+                ss >> latStr; // Read latitude
+
+                if (ss.fail())
+                {
+                    // No more coordinate pairs; attempt to read altitude and distance
+                    try
+                    {
+                        altitude = stod(latStr.value);
+                        ss >> distanceStr;
+                        distance = stod(distanceStr.value);
+                    }
+                    catch (...)
+                    {
+                        // If the string doesn't have altitude and distance, break
+                        break;
+                    }
+                    break;
+                }
+
+                ss >> lonStr; // Read longitude
+                if (ss.fail())
+                    break;
+
+                try
+                {
+                    double lat = stod(latStr.value);
+                    double lonValue = stod(lonStr.value);
+                    coordinates.push_back({lat, lonValue});
+                }
+                catch (...)
+                {
+                    // If the string doesn't have lat long, break
+                    break;
+                }
+            }
+            // Function to add a node, only add if it doesn't exist.
+            auto addNode = [&](double latitude, double longitude)
+            {
+                pair<double, double> coords = {latitude, longitude};
+                if (nodeIndex.find(coords) == nodeIndex.end())
+                {
+                    Node newNode = {latitude, longitude};
+                    nodes.push_back(newNode);
+                    int index = nodes.size() - 1;
+                    nodeIndex[coords] = index;
+                    return index;
+                }
+                else
+                {
+                    return nodeIndex[coords];
+                }
+            };
+
+            // Create edges between consecutive coordinate pairs
+            for (size_t i = 0; i < coordinates.size() - 1; ++i)
+            {
+                // coordinates[i] and coordinates[i + 1] are the source and destination coordinates
+
+                // coordinates[i].first, coordinates[i].second are the lat and long of the source node
+                int srcNodeId = addNode(coordinates[i].first, coordinates[i].second);
+
+                int destNodeId = addNode(coordinates[i + 1].first, coordinates[i + 1].second);
+
+                Edge edge = {
+                    srcNodeId, destNodeId,
+                    distance,
+                    altitude, "road",
+                    "",
+                    ""};
+
+                edges.push_back(edge);
+                adjacencyList[srcNodeId].push_back(destNodeId);
+            }
+        }
+        file.close();
+    }
+    else
+    {
+        cerr << "Unable to open file " << filename << endl;
+    }
+}
+// Function to add a node, only add if it doesn't exist.
+auto addNode(double latitude, double longitude, map<pair<double, double>, int> &nodeId, vector<Node> &nodes)
+{
+    pair<double, double> coords = {latitude, longitude};
+    if (nodeId.find(coords) == nodeId.end())
+    {
+        Node newNode = {latitude, longitude};
+        nodes.push_back(newNode);
+        int index = nodes.size() - 1;
+        nodeId[coords] = index;
+        return index;
+    }
+    else
+    {
+        return nodeId[coords];
+    }
+};
 // main function
 int main(const int argc, const char *argv[])
 {
 
     // arguement theke file nicchi, tai argc == 2 hote hobe
-    if (argc != 2)
+    if (argc != 3)
     {
-        cerr << "Usage: " << "./main" << " <data-set>" << endl;
+        cerr << "Usage: " << argv[0] << " <data-set-file>" << "<route-data-set-file>" << endl;
         exit(EXIT_FAILURE);
     }
-    ifstream file;
-    ofstream output;
-    file.open(argv[1], ios::out);
-    if (!file.is_open())
+
+    vector<Node> nodes;
+    vector<Edge> edges;
+    map<pair<double, double>, int> nodeId;
+    map<int, vector<int>> adjList;
+
+    // readFromRoadDhaka(file, nodes); // sir, amar ekta old function silo
+
+    readDhakaStreet(argv[1], nodes, edges, nodeId, adjList);
+
+    readDhakaRoute(argv[2], nodes, edges, nodeId, adjList);
+
+    // Print the graph information (for verification)
+    cout << "Number of nodes: " << nodes.size() << endl;
+    cout << "Number of edges: " << edges.size() << endl;
+
+    // for (const auto &edge : edges)
+    // {
+    //     cout << "Type: " << edge.type << ", Source: (" << nodes[edge.source].lat << ", "
+    //          << nodes[edge.source].lng << ")";
+
+    //     if (edge.type == "metro")
+    //     {
+    //         cout << " [" << edge.sourceName << "]"; // Only print station names for Metro
+    //         cout << ", Destination: (" << nodes[edge.destination].lat << ", " << nodes[edge.destination].lng
+    //              << ") [" << edge.destinationName << "]";
+    //     }
+    //     else
+    //     {
+    //         cout << ", Destination: (" << nodes[edge.destination].lat << ", " << nodes[edge.destination].lng
+    //              << ")";
+    //     }
+
+    //     cout << ", Distance: " << edge.distance << " km, Altitude: " << edge.altitude << endl;
+    // }
+
+    double sourceLat, sourceLon, destLat, destLon;
+
+    // sourceLat = 90.439973;
+    // sourceLon = 23.741813;
+
+    // destLat = 90.439341;
+    // destLon = 23.742218;
+
+    // input 90.439973 23.741813 90.439341 23.742218
+    cout << "Enter the Source Latitude, Longitude, Destination Latitude, Longitude" << endl;
+    cin >> sourceLat >> sourceLon >> destLat >> destLon;
+
+    int srcNode = addNode(sourceLat, sourceLon, nodeId, nodes);
+    int destNode = addNode(destLat, destLon, nodeId, nodes);
+
+    // use dijkstra's algorithm to find the shortest path
+    auto [path, totalDistance] = dijkstra(srcNode, destNode, nodes, edges, adjList);
+    cout << "Source Node: " << srcNode << endl;
+    cout << "Destination Node: " << destNode << endl;
+
+    cout << "\nShortest Path from (" << nodes[srcNode].lat << ", " << nodes[srcNode].lng << ") to ("
+         << nodes[destNode].lat << ", " << nodes[destNode].lng << "):" << endl;
+    if (path.empty())
     {
-        cerr << "Failed to load data set" << endl;
-        exit(EXIT_FAILURE);
-        return 1;
+        cout << "No path exists." << endl;
     }
-
-    set<Node> nodes;
-
-    readDataFromFile(file, nodes);
-    // now write data in output terminal
-
-    output.open("output.txt", ios::out);
-    unsigned int tt = 0, te = 0;
-    for (auto node : nodes)
+    else
     {
-        output << node.lat_lng << ":";
-        for (auto edge : node.edges)
+        cout << "Path: ";
+        for (size_t i = 0; i < path.size(); ++i)
         {
-            output << "\t=>" << edge.dest.lat_lng;
-        }
-        output << "--> " + to_string(node.edges.front().weight) << endl;
-    }
-    output << "========++========++========++========++========++========" << endl;
-    output.close();
-
-    return 0;
-
-    // Nicher code ta normal ekta dijkstra algorithm er graph
-
-    int n = 0;
-    vector<vector<int>> graph;
-    graph.resize(n, vector<int>(n));
-
-    for (INT i = 0; i < n; i++)
-    {
-        for (INT j = 0; j < n; j++)
-        {
-            double lat1, lat2, lon1, lon2;
-            cin >> lat1 >> lon1 >> lat2 >> lon2;
-        }
-    }
-
-    for (INT i = 0; i < n; i++)
-    {
-        cout << (i) << ": ";
-        for (INT j = 0; j < n; j++)
-        {
-            if (graph[i][j] > 0)
+            cout << "(" << nodes[path[i]].lat << ", " << nodes[path[i]].lng << ")";
+            if (i < path.size() - 1)
             {
-                cout << (j) << "(" << graph[i][j] << ") ";
+                // Find Edge type
+                string edgeType = "None";
+                string sourceName = "";
+                string destinationName = "";
+
+                for (const auto &edge : edges)
+                {
+                    if (edge.source == path[i] && edge.destination == path[i + 1])
+                    {
+                        edgeType = edge.type;
+                        sourceName = edge.sourceName;
+                        destinationName = edge.destinationName;
+                        break;
+                    }
+                }
+                cout << " --(" << edgeType << ")--> ";
+                if (edgeType == "metro")
+                {
+                    cout << "- [" << sourceName << " to " << destinationName << "]";
+                }
+                cout << ")--> ";
             }
         }
         cout << endl;
-    }
 
-    vector<INT> dist(n, INF);
-    vector<INT> parent(n, -1);
-    vector<bool> visited(n, false);
-
-    dist[0] = 0;
-    for (INT i = 0; i < n; i++)
-    {
-        INT min_dist = INF;
-        INT min_index = -1;
-        for (INT j = 0; j < n; j++)
-        {
-            if (!visited[j] && dist[j] < min_dist)
-            {
-                min_dist = dist[j];
-                min_index = j;
-            }
-        }
-
-        visited[min_index] = true;
-
-        for (INT j = 0; j < n; j++)
-        {
-            if (!visited[j] && graph[min_index][j] > 0 && dist[j] > dist[min_index] + graph[min_index][j])
-            {
-                dist[j] = dist[min_index] + graph[min_index][j];
-                parent[j] = min_index;
-            }
-        }
-    }
-
-    // Print the shortest path
-    for (INT i = 0; i < n; i++)
-    {
-        cout << "Shortest path from 1 to " << i + 1 << " is: ";
-        INT j = i;
-        while (j != -1)
-        {
-            cout << j + 1 << " ";
-            j = parent[j];
-        }
-        cout << "with cost: " << dist[i] << endl;
+        cout << "Total Distance: " << totalDistance << " km" << endl;
     }
 
     return 0;
