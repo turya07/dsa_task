@@ -441,11 +441,17 @@ int main(int argc, char *argv[])
     // Now get Source and destination node.
     double sourceLat, sourceLon, destLat, destLon;
 
-    sourceLat = 90.439973;
-    sourceLon = 23.741813;
+    // sourceLat = 90.439973;
+    // sourceLon = 23.741813;
 
-    destLat = 90.439341;
-    destLon = 23.742218;
+    // destLat = 90.439341;
+    // destLon = 23.742218;
+
+    sourceLat = 90.368626;
+    sourceLon = 23.807119;
+
+    destLat = 90.369223;
+    destLon = 23.805553;
 
     // cout << "Enter the Source Latitude" << endl;
     //

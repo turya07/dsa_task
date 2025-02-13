@@ -4,6 +4,8 @@ using namespace std;
 #define INT unsigned int
 #define INF (INT)1e8
 
+// check please: https://www.google.com/maps/d/u/0/viewer?mid=1dOfrWHkEHyWvLkNnuNhVij5PsH6PPZQ&ll=23.777787056022266%2C90.39111249999999&z=13
+
 typedef struct Node
 {
     double lat;
@@ -179,7 +181,7 @@ pair<vector<int>, double> dijkstra(int srcNode, int destNode, const vector<Node>
 }
 
 // Function to read DhakaMetroRail data from Routemap-DhakaMetroRail.csv
-void readDhakaRoute(const string &filename, vector<Node> &nodes, vector<Edge> &edges, map<pair<double, double>, int> &nodeIndex, map<int, vector<int>> &adjacencyList)
+void readDhakaRoute(const string &filename, string edgeType, vector<Node> &nodes, vector<Edge> &edges, map<pair<double, double>, int> &nodeIndex, map<int, vector<int>> &adjacencyList)
 {
     ifstream metrofile(filename);
     string metroline;
@@ -275,7 +277,7 @@ void readDhakaRoute(const string &filename, vector<Node> &nodes, vector<Edge> &e
                     total_distance += calculateDistance(coordinates[i].first, coordinates[i].second, coordinates[i + 1].first, coordinates[i + 1].second);
                 }
 
-                Edge edge = {sourceNodeIndex, destNodeIndex, total_distance, altitude, "metro", startNameStr.value, endNameStr.value};
+                Edge edge = {sourceNodeIndex, destNodeIndex, total_distance, altitude, edgeType, startNameStr.value, endNameStr.value};
                 edges.push_back(edge);
                 if (adjacencyList.find(sourceNodeIndex) == adjacencyList.end())
                 {
@@ -422,14 +424,74 @@ auto addNode(double latitude, double longitude, map<pair<double, double>, int> &
         return nodeId[coords];
     }
 };
+
+void createKMLFile(const vector<Node> &nodes, const vector<Edge> &edges, const vector<int> &path)
+{
+    ofstream kmlFile("route.kml");
+    if (kmlFile.is_open())
+    {
+        kmlFile << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+        kmlFile << "<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n";
+        kmlFile << "<Document>\n";
+        kmlFile << "<name>Route</name>\n";
+        kmlFile << "<Placemark>\n";
+        kmlFile << "<name>bsse 1507</name>\n";
+        kmlFile << "<Style>\n";
+        kmlFile << "<LineStyle>\n";
+        kmlFile << "<color>ffff00ff</color>\n"; // Blue color in ABGR format
+        kmlFile << "<width>4</width>\n";
+        kmlFile << "</LineStyle>\n";
+        kmlFile << "</Style>\n";
+        kmlFile << "<LineString>\n";
+        kmlFile << "<tessellate>1</tessellate>\n";
+        kmlFile << "<coordinates>\n";
+
+        for (int i = 0; i < path.size(); ++i)
+        {
+            kmlFile << fixed << setprecision(6) << nodes[path[i]].lat << "," << nodes[path[i]].lng;
+            kmlFile << fixed << setprecision(0);
+            bool isAltitude = false;
+            // check from edge and put altitude and distance
+            if (i < path.size() - 1)
+            {
+                for (const auto &edge : edges)
+                {
+                    if (edge.source == path[i] && edge.destination == path[i + 1])
+                    {
+                        kmlFile << "," << edge.altitude << endl;
+                        isAltitude = true;
+                        break;
+                    }
+                }
+            }
+            if (!isAltitude)
+            {
+                kmlFile << ",0" << endl;
+            }
+        }
+
+        kmlFile << "</coordinates>\n";
+        kmlFile << "</LineString>\n";
+        kmlFile << "</Placemark>\n";
+        kmlFile << "</Document>\n";
+        kmlFile << "</kml>\n";
+        kmlFile.close();
+    }
+    else
+    {
+        cerr << "Unable to open file output.kml" << endl;
+    }
+}
+
 // main function
 int main(const int argc, const char *argv[])
 {
-
+    // set precision upto 6 digit
+    cout << fixed << setprecision(6);
     // arguement theke file nicchi, tai argc == 2 hote hobe
-    if (argc != 3)
+    if (argc != 5)
     {
-        cerr << "Usage: " << argv[0] << " <data-set-file>" << "<route-data-set-file>" << endl;
+        cerr << "Usage 5 arg: " << argv[0] << " <data-set-file>" << "<route-data-set-files>(total 3)" << endl;
         exit(EXIT_FAILURE);
     }
 
@@ -442,7 +504,9 @@ int main(const int argc, const char *argv[])
 
     readDhakaStreet(argv[1], nodes, edges, nodeId, adjList);
 
-    readDhakaRoute(argv[2], nodes, edges, nodeId, adjList);
+    readDhakaRoute(argv[2], "metro", nodes, edges, nodeId, adjList);
+    readDhakaRoute(argv[3], "bus", nodes, edges, nodeId, adjList);
+    readDhakaRoute(argv[4], "bus", nodes, edges, nodeId, adjList);
 
     // Print the graph information (for verification)
     cout << "Number of nodes: " << nodes.size() << endl;
@@ -476,7 +540,6 @@ int main(const int argc, const char *argv[])
     // destLat = 90.439341;
     // destLon = 23.742218;
 
-    // input 90.439973 23.741813 90.439341 23.742218
     cout << "Enter the Source Latitude, Longitude, Destination Latitude, Longitude" << endl;
     cin >> sourceLat >> sourceLon >> destLat >> destLon;
 
@@ -485,27 +548,30 @@ int main(const int argc, const char *argv[])
 
     // use dijkstra's algorithm to find the shortest path
     auto [path, totalDistance] = dijkstra(srcNode, destNode, nodes, edges, adjList);
-    cout << "Source Node: " << srcNode << endl;
-    cout << "Destination Node: " << destNode << endl;
+
+    printf("Source: (%lf, %lf)\n", nodes[srcNode].lat, nodes[srcNode].lng);
+    printf("Destination: (%lf, %lf)\n", nodes[destNode].lat, nodes[destNode].lng);
 
     cout << "\nShortest Path from (" << nodes[srcNode].lat << ", " << nodes[srcNode].lng << ") to ("
          << nodes[destNode].lat << ", " << nodes[destNode].lng << "):" << endl;
+    bool hasPath = true;
     if (path.empty())
     {
         cout << "No path exists." << endl;
+        hasPath = false;
     }
     else
     {
-        cout << "Path: ";
+        cout << "Path: " << endl;
         for (size_t i = 0; i < path.size(); ++i)
         {
-            cout << "(" << nodes[path[i]].lat << ", " << nodes[path[i]].lng << ")";
             if (i < path.size() - 1)
             {
-                // Find Edge type
+                // Find Edge type and cost
                 string edgeType = "None";
                 string sourceName = "";
                 string destinationName = "";
+                double cost = 0.0;
 
                 for (const auto &edge : edges)
                 {
@@ -514,15 +580,31 @@ int main(const int argc, const char *argv[])
                         edgeType = edge.type;
                         sourceName = edge.sourceName;
                         destinationName = edge.destinationName;
+                        cost = edge.distance * 2; // Assuming cost is distance * 2 for simplicity
                         break;
                     }
                 }
-                cout << " --(" << edgeType << ")--> ";
+
                 if (edgeType == "metro")
                 {
-                    cout << "- [" << sourceName << " to " << destinationName << "]";
+                    cout << "Cost: ৳" << fixed << setprecision(2) << cost << ": Ride Metro from "
+                         << fixed << setprecision(6)
+                         << sourceName << " (" << nodes[path[i]].lat << ", " << nodes[path[i]].lng << ") to "
+                         << destinationName << " (" << nodes[path[i + 1]].lat << ", " << nodes[path[i + 1]].lng << ")" << endl;
                 }
-                cout << ")--> ";
+                else if (edgeType == "road" || edgeType == "bus")
+                {
+                    cout << "Cost: ৳" << fixed << setprecision(2) << cost << ": Ride Bus from ("
+                         << fixed << setprecision(6)
+                         << nodes[path[i]].lat << ", " << nodes[path[i]].lng << ") to ("
+                         << nodes[path[i + 1]].lat << ", " << nodes[path[i + 1]].lng << ")" << endl;
+                }
+                else
+                {
+                    cout << "Cost: ৳0.00: Walk from ("
+                         << nodes[path[i]].lat << ", " << nodes[path[i]].lng << ") to ("
+                         << nodes[path[i + 1]].lat << ", " << nodes[path[i + 1]].lng << ")" << endl;
+                }
             }
         }
         cout << endl;
@@ -530,5 +612,14 @@ int main(const int argc, const char *argv[])
         cout << "Total Distance: " << totalDistance << " km" << endl;
     }
 
+    if (hasPath){
+        cout << "Generating KML file..." << endl;
+        createKMLFile(nodes, edges, path);
+        cout << "KML file generated successfully." << endl;
+    }
+
     return 0;
 }
+
+// input 90.439973 23.741813 90.439341 23.742218
+// input 90.344319 23.813352 90.342514 23.810823

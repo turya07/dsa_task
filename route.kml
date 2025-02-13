@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+<name>Route</name>
+<Placemark>
+<name>bsse 1507 2</name>
+<Style>
+<LineStyle>
+<color>ffff00ff</color>
+<width>4</width>
+</LineStyle>
+</Style>
+<LineString>
+<tessellate>1</tessellate>
+<coordinates>
+90.439973,23.741813,0
+90.439558,23.741519,0
+90.439213,23.741603,0
+90.439341,23.742218,0
+</coordinates>
+</LineString>
+</Placemark>
+</Document>
+</kml>
